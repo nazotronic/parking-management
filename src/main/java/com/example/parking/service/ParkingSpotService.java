@@ -1,35 +1,53 @@
 package com.example.parking.service;
 
+import com.example.parking.exception.ResourceNotFoundException;
 import com.example.parking.model.ParkingSpot;
+import com.example.parking.repository.ParkingSpotRepository;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
-
-import java.util.ArrayList;
-import java.util.List;
-import java.util.UUID;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class ParkingSpotService {
-    // Наше in-memory сховище
-    private final List<ParkingSpot> spots = new ArrayList<>();
 
-    // GET all
-    public List<ParkingSpot> getAllSpots() {
-        return spots;
+    private final ParkingSpotRepository parkingSpotRepository;
+
+    public ParkingSpotService(ParkingSpotRepository parkingSpotRepository) {
+        this.parkingSpotRepository = parkingSpotRepository;
     }
 
-    // GET by id
+    // Отримати всі місця з пагінацією
+    public Page<ParkingSpot> getAllSpots(Pageable pageable) {
+        return parkingSpotRepository.findAll(pageable);
+    }
+
+    // Знайти місце за ID
     public ParkingSpot getSpotById(String id) {
-        return spots.stream()
-                .filter(spot -> spot.getId().equals(id))
-                .findFirst()
-                .orElseThrow(() -> new RuntimeException("Паркомісце з ID " + id + " не знайдено"));
+        return parkingSpotRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Паркомісце з ID " + id + " не знайдено"));
     }
 
-    // POST (Створення)
+    // Створити нове місце
+    @Transactional
     public ParkingSpot createSpot(ParkingSpot spot) {
-        spot.setId(UUID.randomUUID().toString()); // Генеруємо унікальний ID
         spot.setOccupied(false); // За замовчуванням нове місце вільне
-        spots.add(spot);
-        return spot;
+        return parkingSpotRepository.save(spot);
+    }
+
+    // Оновити паркомісце
+    @Transactional
+    public ParkingSpot updateSpot(String id, ParkingSpot updatedSpot) {
+        ParkingSpot existingSpot = getSpotById(id);
+        existingSpot.setNumber(updatedSpot.getNumber());
+        existingSpot.setOccupied(updatedSpot.isOccupied());
+        return parkingSpotRepository.save(existingSpot);
+    }
+
+    // Видалити паркомісце
+    @Transactional
+    public void deleteSpot(String id) {
+        ParkingSpot existingSpot = getSpotById(id);
+        parkingSpotRepository.delete(existingSpot);
     }
 }
