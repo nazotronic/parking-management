@@ -7,6 +7,8 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.client.HttpClientErrorException;
+import org.springframework.web.client.RestTemplate;
 
 import java.time.LocalDateTime;
 
@@ -14,32 +16,42 @@ import java.time.LocalDateTime;
 public class ParkingSessionService {
 
     private final ParkingSessionRepository parkingSessionRepository;
+    private final RestTemplate restTemplate;
 
-    public ParkingSessionService(ParkingSessionRepository parkingSessionRepository) {
+    // URL сервісу клієнтів (Service A)
+    private static final String CLIENT_SERVICE_URL = "http://localhost:8081/api/clients/";
+
+    public ParkingSessionService(ParkingSessionRepository parkingSessionRepository, RestTemplate restTemplate) {
         this.parkingSessionRepository = parkingSessionRepository;
+        this.restTemplate = restTemplate;
     }
 
-    // Отримати всі сесії з пагінацією
     public Page<ParkingSession> getAllSessions(Pageable pageable) {
         return parkingSessionRepository.findAll(pageable);
     }
 
-    // Знайти сесію за ID
     public ParkingSession getSessionById(String id) {
         return parkingSessionRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Сесію з ID " + id + " не знайдено"));
     }
 
-    // Створити нову сесію
     @Transactional
     public ParkingSession createSession(ParkingSession session) {
+        // МІЖСЕРВІСНА ВЗАЄМОДІЯ: Перевіряємо чи існує клієнт у Service A
+        try {
+            restTemplate.getForObject(CLIENT_SERVICE_URL + session.getClientId(), Object.class);
+        } catch (HttpClientErrorException.NotFound e) {
+            throw new ResourceNotFoundException("Клієнта з ID " + session.getClientId() + " не знайдено в client-service!");
+        } catch (Exception e) {
+            throw new RuntimeException("Сервіс клієнтів (client-service) тимчасово недоступний. Неможливо створити сесію.");
+        }
+
         session.setStartTime(LocalDateTime.now());
         session.setActive(true);
         session.setEndTime(null);
         return parkingSessionRepository.save(session);
     }
 
-    // Оновити сесію (наприклад, закрити її)
     @Transactional
     public ParkingSession updateSession(String id, ParkingSession updatedSession) {
         ParkingSession existingSession = getSessionById(id);
@@ -51,7 +63,6 @@ public class ParkingSessionService {
         return parkingSessionRepository.save(existingSession);
     }
 
-    // Закрити сесію (додатковий зручний метод)
     @Transactional
     public ParkingSession closeSession(String id) {
         ParkingSession session = getSessionById(id);
@@ -60,7 +71,6 @@ public class ParkingSessionService {
         return parkingSessionRepository.save(session);
     }
 
-    // Видалити сесію
     @Transactional
     public void deleteSession(String id) {
         ParkingSession session = getSessionById(id);

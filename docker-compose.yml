@@ -1,0 +1,59 @@
+version: '3.8'
+
+services:
+  mysql-db:
+    image: mysql:8.0
+    container_name: parking-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: nazar
+      MYSQL_DATABASE: parking_db # Automatically created
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    networks:
+      - parking-network
+
+  redis-cache:
+    image: redis:7.0-alpine
+    container_name: parking-redis
+    ports:
+      - "6379:6379"
+    networks:
+      - parking-network
+
+  client-app:
+    build:
+      context: ./client-service
+    container_name: client-service
+    ports:
+      - "8081:8081"
+    environment:
+      - DB_HOST=mysql-db
+      - REDIS_HOST=redis-cache
+    depends_on:
+      - mysql-db
+      - redis-cache
+    networks:
+      - parking-network
+
+  parking-app:
+    build:
+      context: ./parking-service
+    container_name: parking-service
+    ports:
+      - "8082:8082"
+    environment:
+      - DB_HOST=mysql-db
+    depends_on:
+      - mysql-db
+      - client-app
+    networks:
+      - parking-network
+
+networks:
+  parking-network:
+    driver: bridge
+
+volumes:
+  mysql_data:
